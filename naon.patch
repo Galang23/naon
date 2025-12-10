@@ -1,0 +1,143 @@
+--- a/src/file.h
++++ b/src/file.h
+@@ -469,6 +469,7 @@ struct magic_set {
+ struct out {
+ Accumulation buffer */
+ ;gth of buffer */
+ Printable buffer */
++char *sundabuf;danese transformation buffer (naon prank) */
+ } o;
+ uint32_t offset;g on the magic entry */
+--- a/src/apprentice.c
++++ b/src/apprentice.c
+@@ -539,6 +539,7 @@ file_ms_free(struct magic_set *ms)
+ dabuf);  /* Sundanese transformation buffer (naon prank) */
+ free(ms->c.li);
+ free(ms->fnamebuf);
+ #ifdef USE_C_LOCALE
+--- a/src/funcs.c
++++ b/src/funcs.c
+@@ -528,6 +528,10 @@ file_reset(struct magic_set *ms, int checkloaded)
+ = NULL;
+ }
++if (ms->o.sundabuf) {
++free(ms->o.sundabuf);
++ms->o.sundabuf = NULL;
++}
+ ms->event_flags &= ~EVENT_HAD_ERR;
+ ms->error = -1;
+ return 0;
+@@ -536,6 +540,89 @@ file_reset(struct magic_set *ms, int checkloaded)
+ *(n)++ = ((CAST(uint32_t, *(o)) >> 0) & 7) + '0', \
+ (o)++)
+
++/*
++ * Sundanese-silly transformation for file descriptions
++ * "naon" = "what" in Sundanese
++ * Part of the naon prank utility (nano typo → naon)
++ *
++ * When someone types "naon somefile" instead of "nano somefile",
++ * they get Sundanese output instead of a text editor!
++ */
++file_private const char *
++sundanese_transform(struct magic_set *ms, const char *orig)
++{
++static const struct {
++const char *pattern;
++const char *replacement;
++} mappings[] = {
++{ "ASCII text", "téks ASCII, naon atuh ieu téh?" },
++{ "UTF-8 Unicode text", "téks Unicode UTF-8, meuni alus euy!" },
++{ "ISO-8859 text", "téks ISO-8859, aksara Éropa ieu mah" },
++{ "ELF 64-bit LSB pie executable", "program ELF 64-bit LSB pie, bisa dijalankeun" },
++{ "ELF 64-bit LSB executable", "program ELF 64-bit, bisa dijalankeun" },
++{ "ELF 64-bit LSB shared object", "pustaka ELF 64-bit nu dibagikeun" },
++{ "ELF 32-bit LSB executable", "program ELF 32-bit, bisa dijalankeun" },
++{ "ELF 32-bit LSB shared object", "pustaka ELF 32-bit nu dibagikeun" },
++{ "directory", "ieu téh polder, lain file atuh!" },
++{ "empty", "kosong wungkul, euweuh nanaon di jerona" },
++{ "symbolic link to", "tautan simbolik ka" },
++{ "gzip compressed data", "data dikompres ku gzip, rame euy!" },
++{ "Zip archive data", "arsip Zip, dikompakeun rapih" },
++{ "XZ compressed data", "data dikompres XZ, leutik pisan" },
++{ "bzip2 compressed data", "data dikompres bzip2, hémat tempat" },
++{ "zstd compressed data", "data dikompres Zstandard, gancang pisan" },
++{ "POSIX tar archive", "arsip tar POSIX, isinya loba pisan" },
++{ "PNG image data", "gambar PNG, sae pisan euy!" },
++{ "JPEG image data", "gambar JPEG, alus kabina-bina" },
++{ "GIF image data", "gambar GIF, gerak-gerak lucu" },
++{ "SVG Scalable Vector Graphics", "gambar SVG, bisa dizoom lancar" },
++{ "PDF document", "dokumen PDF, baca heula atuh" },
++{ "HTML document", "dokumen HTML, website ieu mah" },
++{ "XML", "dokumen XML, strukturna rapih" },
++{ "JSON text data", "data JSON, programmer resep ieu téh" },
++{ "Python script", "skrip Python, ular digital" },
++{ "Bourne-Again shell script", "skrip Bash, paréntah shell" },
++{ "POSIX shell script", "skrip shell POSIX" },
++{ "Perl script", "skrip Perl, mutiara kode" },
++{ "cannot open", "teu bisa dibuka, nanaon ieu téh?" },
++{ "No such file", "file-na euweuh, dimana atuh?" },
++{ "data", "data naon wae, teu jelas" },
++{ NULL, NULL }
++};
++char *buf;
++size_t i, len;
++
++if (orig == NULL)
++return NULL;
++
++/* Check for known patterns */
++for (i = 0; mappings[i].pattern != NULL; i++) {
++if (strstr(orig, mappings[i].pattern) != NULL) {
++len = strlen(mappings[i].replacement) + 1;
++buf = CAST(char *, malloc(len));
++if (buf == NULL)
++return orig;
++strlcpy(buf, mappings[i].replacement, len);
++if (ms->o.sundabuf != NULL)
++free(ms->o.sundabuf);
++ms->o.sundabuf = buf;
++return buf;
++}
++}
++
++/* Fallback: append Sundanese phrase */
++len = strlen(orig) + 32;
++buf = CAST(char *, malloc(len));
++if (buf == NULL)
++return orig;
++snprintf(buf, len, "%s, naon ieu téh?", orig);
++if (ms->o.sundabuf != NULL)
++free(ms->o.sundabuf);
++ms->o.sundabuf = buf;
++return buf;
++}
++
+ file_protected const char *
+ file_getbuffer(struct magic_set *ms)
+ {
+@@ -548,7 +635,7 @@ file_getbuffer(struct magic_set *ms)
+  NULL;
+
+ if (ms->flags & MAGIC_RAW)
+-return ms->o.buf;
++return sundanese_transform(ms, ms->o.buf);
+
+ if (ms->o.buf == NULL)
+  NULL;
+@@ -598,7 +685,7 @@ file_getbuffer(struct magic_set *ms)
+
+ g succeeded as a multi-byte sequence */
+ v != 0)
+-return ms->o.pbuf;
++return sundanese_transform(ms, ms->o.pbuf);
+ }
+ #endif
+
+@@ -609,7 +696,7 @@ file_getbuffer(struct magic_set *ms)
+ p = '\0';
+-return ms->o.pbuf;
++return sundanese_transform(ms, ms->o.pbuf);
+ }
+
+ file_protected int
